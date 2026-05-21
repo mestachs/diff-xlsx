@@ -3,10 +3,20 @@ import { FileUpload } from './components/FileUpload'
 import { DiffStats } from './components/DiffStats'
 import { SheetTab } from './components/SheetTab'
 import { SpreadsheetGrid } from './components/SpreadsheetGrid'
+import { DiffTable } from './components/DiffTable'
+import { CellDetail } from './components/CellDetail'
 import { parseXlsxFile } from './lib/xlsx-parser'
 import { diffWorkbooks } from './lib/diff-engine'
 import type { ParsedWorkbook } from './types'
-import type { DiffResult } from './lib/diff-engine'
+import type { DiffResult, CellDiff } from './lib/diff-engine'
+
+type ViewMode = 'grid' | 'table'
+
+interface SelectedCell {
+  sheetName: string;
+  addr: string;
+  diff: CellDiff;
+}
 
 export default function App() {
   const [oldFile, setOldFile] = useState<ParsedWorkbook | null>(null)
@@ -15,6 +25,8 @@ export default function App() {
   const [newFilename, setNewFilename] = useState<string | undefined>()
   const [diffResult, setDiffResult] = useState<DiffResult | null>(null)
   const [activeSheet, setActiveSheet] = useState<string>('')
+  const [viewMode, setViewMode] = useState<ViewMode>('grid')
+  const [selectedCell, setSelectedCell] = useState<SelectedCell | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -64,86 +76,122 @@ export default function App() {
 
   const activeSheetResult = diffResult?.sheets.find((s) => s.sheetName === activeSheet)
 
+  const handleSheetSelect = useCallback((name: string) => {
+    setActiveSheet(name)
+    setSelectedCell(null)
+  }, [])
+
+  const handleCellClick = useCallback((addr: string, diff: CellDiff | undefined) => {
+    if (!diff) return
+    setSelectedCell({ sheetName: activeSheet, addr, diff })
+  }, [activeSheet])
+
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900">
-      <header className="bg-white border-b border-slate-200 shadow-sm">
-        <div className="max-w-7xl mx-auto px-6 py-4">
-          <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-            <span>⊟</span>
-            XLSX Diff Viewer
-          </h1>
-          <p className="text-slate-500 text-sm mt-0.5">Compare two Excel spreadsheets visually</p>
+    <div className="h-full flex flex-col bg-slate-50 text-slate-900 overflow-hidden">
+
+      {/* compact top bar */}
+      <header className="shrink-0 bg-white border-b border-slate-200 px-4 py-2 flex items-center gap-4">
+        <h1 className="font-bold text-slate-900 flex items-center gap-1.5 shrink-0">
+          <span>⊟</span> XLSX Diff Viewer
+        </h1>
+        <div className="flex-1 grid grid-cols-[1fr_auto_1fr] gap-2 items-center max-w-3xl">
+          <FileUpload label="Old file" filename={oldFilename} onFile={handleOldFile} />
+          <span className="text-slate-400 font-bold text-sm px-1">vs</span>
+          <FileUpload label="New file" filename={newFilename} onFile={handleNewFile} />
         </div>
-      </header>
-
-      <main className="flex-1 max-w-7xl mx-auto w-full px-6 py-8 flex flex-col gap-6">
-        <section className="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] gap-4 items-center">
-          <FileUpload
-            label="Old file (base)"
-            filename={oldFilename}
-            onFile={handleOldFile}
-          />
-          <div className="text-2xl font-bold text-slate-400 text-center px-2">vs</div>
-          <FileUpload
-            label="New file (compare)"
-            filename={newFilename}
-            onFile={handleNewFile}
-          />
-        </section>
-
         {loading && (
-          <div className="flex items-center gap-3 text-slate-600 py-2">
-            <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-            Parsing spreadsheet...
+          <div className="flex items-center gap-2 text-sm text-slate-500 shrink-0">
+            <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+            Parsing…
           </div>
         )}
+      </header>
+
+      <main className="flex-1 min-h-0 flex flex-col px-4 py-3 gap-3 overflow-hidden">
 
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg" role="alert">
+          <div className="shrink-0 bg-red-50 border border-red-200 text-red-800 px-4 py-2 rounded-lg text-sm" role="alert">
             {error}
           </div>
         )}
 
         {!oldFile && !newFile && !loading && (
-          <div className="text-center py-20 flex flex-col items-center gap-4 text-slate-500">
-            <div className="text-6xl">📊</div>
-            <h2 className="text-xl font-semibold text-slate-700">Upload two XLSX files to compare</h2>
-            <p className="text-sm max-w-md">Drop files or click the upload areas above. Differences will be highlighted cell by cell.</p>
+          <div className="flex-1 flex flex-col items-center justify-center gap-3 text-slate-400">
+            <div className="text-5xl">📊</div>
+            <p className="text-sm">Upload two XLSX files above to compare them</p>
           </div>
         )}
 
         {(oldFile || newFile) && !diffResult && !loading && (
-          <div className="text-center py-16 flex flex-col items-center gap-3 text-slate-400">
-            <div className="text-5xl">⏳</div>
-            <p>Upload both files to see the diff</p>
+          <div className="flex-1 flex flex-col items-center justify-center gap-3 text-slate-400">
+            <div className="text-4xl">⏳</div>
+            <p className="text-sm">Upload both files to see the diff</p>
           </div>
         )}
 
         {diffResult && (
-          <section className="flex flex-col gap-4">
-            <DiffStats stats={diffResult.totalStats} />
+          <div className="flex-1 min-h-0 flex flex-col gap-2 overflow-hidden">
+            <div className="flex gap-3 items-stretch shrink-0">
+              <DiffStats stats={diffResult.totalStats} />
+              {selectedCell && (
+                <CellDetail
+                  sheetName={selectedCell.sheetName}
+                  addr={selectedCell.addr}
+                  diff={selectedCell.diff}
+                  onClose={() => setSelectedCell(null)}
+                />
+              )}
+            </div>
 
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-              <SheetTab
-                sheets={diffResult.sheets}
-                activeSheet={activeSheet}
-                onSelect={setActiveSheet}
-              />
-              <div className="p-4">
-                {activeSheetResult ? (
-                  <SpreadsheetGrid sheet={activeSheetResult} />
+            <div className="flex-1 min-h-0 flex flex-col bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
+
+              {/* toolbar: Grid / Changes toggle */}
+              <div className="shrink-0 flex items-center gap-1 px-2 py-1.5 border-b border-slate-200 bg-slate-50">
+                {(['grid', 'table'] as ViewMode[]).map((mode) => (
+                  <button
+                    key={mode}
+                    onClick={() => setViewMode(mode)}
+                    className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
+                      viewMode === mode
+                        ? 'bg-slate-800 text-white'
+                        : 'text-slate-500 hover:text-slate-800 hover:bg-white'
+                    }`}
+                  >
+                    {mode === 'grid' ? 'Grid' : 'Changes'}
+                  </button>
+                ))}
+              </div>
+
+              {/* sheet tabs — wrapping, only in grid mode */}
+              {viewMode === 'grid' && (
+                <SheetTab
+                  sheets={diffResult.sheets}
+                  activeSheet={activeSheet}
+                  onSelect={handleSheetSelect}
+                />
+              )}
+
+              {/* content fills the rest */}
+              <div className="flex-1 min-h-0 overflow-hidden p-3">
+                {viewMode === 'table' ? (
+                  <DiffTable result={diffResult} />
+                ) : activeSheetResult ? (
+                  <SpreadsheetGrid
+                    sheet={activeSheetResult}
+                    selectedAddr={selectedCell?.addr}
+                    onCellClick={handleCellClick}
+                  />
                 ) : (
-                  <div className="text-center py-8 text-slate-400">Select a sheet above</div>
+                  <div className="flex items-center justify-center h-full text-slate-400 text-sm">
+                    Select a sheet above
+                  </div>
                 )}
               </div>
+
             </div>
-          </section>
+          </div>
         )}
       </main>
-
-      <footer className="text-center py-4 text-xs text-slate-400 border-t border-slate-100">
-        <p>Browser-only • No data uploaded to any server • Open source</p>
-      </footer>
     </div>
   )
 }

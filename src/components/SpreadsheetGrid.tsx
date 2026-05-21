@@ -1,8 +1,12 @@
+import { useState } from 'react'
 import type { SheetDiffResult, CellDiff } from '../lib/diff-engine'
 import type { ParsedCell } from '../types'
+import { InlineDiff } from './InlineDiff'
 
 interface SpreadsheetGridProps {
   sheet: SheetDiffResult;
+  selectedAddr?: string;
+  onCellClick?: (addr: string, diff: CellDiff | undefined) => void;
 }
 
 function colIndexToLetter(col: number): string {
@@ -44,15 +48,8 @@ function CellContent({ diff }: { diff: CellDiff | undefined }) {
     return <s className="text-red-700">{cellDisplay(diff.oldCell)}</s>
   }
 
-  // changed: show old → new (formula takes priority over computed value)
-  const oldText = cellDisplay(diff.oldCell)
-  const newText = cellDisplay(diff.newCell)
-  return (
-    <span className="flex flex-col gap-0.5 text-xs">
-      <s className="text-red-500 opacity-80">{oldText}</s>
-      <span className="text-emerald-700 font-semibold">{newText}</span>
-    </span>
-  )
+  // changed: inline char diff
+  return <InlineDiff oldText={cellDisplay(diff.oldCell)} newText={cellDisplay(diff.newCell)} className="text-xs" />
 }
 
 const statItemClass: Record<string, string> = {
@@ -62,24 +59,44 @@ const statItemClass: Record<string, string> = {
   unchanged: 'bg-slate-100 text-slate-600 rounded px-2 py-0.5 text-xs font-medium',
 }
 
-export function SpreadsheetGrid({ sheet }: SpreadsheetGridProps) {
+export function SpreadsheetGrid({ sheet, selectedAddr, onCellClick }: SpreadsheetGridProps) {
   const { cellDiffs, range, stats } = sheet
+  const [hideUnchanged, setHideUnchanged] = useState(false)
 
   const isEmpty = range.maxRow < range.minRow || range.maxCol < range.minCol || Object.keys(cellDiffs).length === 0
 
   const cols: number[] = []
   for (let c = range.minCol; c <= range.maxCol; c++) cols.push(c)
 
-  const rows: number[] = []
-  for (let r = range.minRow; r <= range.maxRow; r++) rows.push(r)
+  const allRows: number[] = []
+  for (let r = range.minRow; r <= range.maxRow; r++) allRows.push(r)
+
+  const rows = hideUnchanged
+    ? allRows.filter((r) =>
+        cols.some((c) => {
+          const diff = cellDiffs[`${colIndexToLetter(c)}${r + 1}`]
+          return diff && diff.status !== 'unchanged'
+        }),
+      )
+    : allRows
 
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap gap-2 px-1">
+    <div className="flex flex-col gap-2 h-full min-h-0">
+      <div className="flex flex-wrap items-center gap-2 px-1 shrink-0">
         <span className={statItemClass.added}>+{stats.added} added</span>
         <span className={statItemClass.removed}>−{stats.removed} removed</span>
         <span className={statItemClass.changed}>~{stats.changed} changed</span>
         <span className={statItemClass.unchanged}>{stats.unchanged} unchanged</span>
+        <button
+          onClick={() => setHideUnchanged((v) => !v)}
+          className={`ml-auto text-xs px-3 py-0.5 rounded border transition-colors ${
+            hideUnchanged
+              ? 'bg-slate-700 text-white border-slate-700'
+              : 'bg-white text-slate-600 border-slate-300 hover:border-slate-400'
+          }`}
+        >
+          {hideUnchanged ? 'Show all rows' : 'Hide unchanged rows'}
+        </button>
       </div>
 
       {isEmpty ? (
@@ -87,7 +104,7 @@ export function SpreadsheetGrid({ sheet }: SpreadsheetGridProps) {
           {sheet.status === 'added' ? 'Sheet added — empty' : sheet.status === 'removed' ? 'Sheet removed — empty' : 'No data'}
         </div>
       ) : (
-        <div className="overflow-auto rounded-lg border border-slate-200 max-h-[70vh]">
+        <div className="overflow-auto rounded-lg border border-slate-200 flex-1 min-h-0">
           <table className="border-collapse text-sm font-mono">
             <thead className="sticky top-0 z-10">
               <tr>
@@ -108,10 +125,16 @@ export function SpreadsheetGrid({ sheet }: SpreadsheetGridProps) {
                   {cols.map((c) => {
                     const addr = `${colIndexToLetter(c)}${r + 1}`
                     const diff = cellDiffs[addr]
+                    const isSelected = addr === selectedAddr
                     return (
                       <td
                         key={c}
-                        className={`px-2 py-1 border border-slate-100 whitespace-pre-wrap max-w-[20rem] ${diff ? cellBg[diff.status] : 'bg-white'}`}
+                        onClick={() => onCellClick?.(addr, diff)}
+                        className={`px-2 py-1 border whitespace-pre-wrap max-w-[20rem] cursor-pointer transition-colors ${
+                          isSelected
+                            ? 'border-blue-400 bg-blue-50 ring-1 ring-inset ring-blue-400'
+                            : `border-slate-100 ${diff ? cellBg[diff.status] : 'bg-white'} hover:brightness-95`
+                        }`}
                       >
                         <CellContent diff={diff} />
                       </td>
