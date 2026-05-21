@@ -1,9 +1,21 @@
 export type CellValue = string | number | boolean | null;
 
+export interface CellStyle {
+  bgColor?: string;   // 6-char hex, e.g. "FFFF00"
+  color?: string;     // 6-char hex
+  bold?: boolean;
+  italic?: boolean;
+  underline?: boolean;
+  fontSize?: number;  // in points
+  align?: 'left' | 'center' | 'right' | 'fill' | 'justify';
+  wrapText?: boolean;
+}
+
 export interface ParsedCell {
   value: CellValue;
   formula?: string;
   formatted?: string;
+  style?: CellStyle;
 }
 
 export interface ParsedSheet {

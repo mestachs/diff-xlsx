@@ -77,6 +77,16 @@ export function CellDetail({ sheetName, addr, diff, onClose }: CellDetailProps) 
       {diff.status === 'unchanged' && (
         <div className="text-xs font-mono bg-slate-50 text-slate-600 rounded px-2 py-1 break-all">{oldText}</div>
       )}
+
+      {/* Style swatch */}
+      {(diff.newCell ?? diff.oldCell)?.style && (
+        <div>
+          <span className="font-sans text-slate-400 uppercase tracking-wide text-[10px]">Style</span>
+          <pre className="bg-slate-50 text-slate-600 rounded px-2 py-1 mt-0.5 text-[10px] font-mono whitespace-pre-wrap break-all">
+            {JSON.stringify((diff.newCell ?? diff.oldCell)!.style, null, 2)}
+          </pre>
+        </div>
+      )}
     </div>
   )
 }
